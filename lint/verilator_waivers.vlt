@@ -1,0 +1,15 @@
+`verilator_config
+// =============================================================================
+// Lint waivers - used ONLY by the assertion-view lint run
+// (--lint-only -Wall --assert). The synthesis view
+// (-DSYNTHESIS, assertions excluded) is run with no waivers at all.
+// Note: never start a comment with the tool name - it is parsed as a pragma.
+// =============================================================================
+
+// SYNCASYNCNET on PRESETn:
+//   The SVA properties use disable iff (!presetn), which Verilator counts as a
+//   synchronous use of PRESETn, while the datapath flops use it as an
+//   asynchronous reset (ASYNC_RESET = 1). The assertions are simulation-only
+//   code, so this is not a real reset-domain issue. A genuine sync/async mix in
+//   the RTL is still reported by the synthesis-view run.
+lint_off -rule SYNCASYNCNET -file "*/rtl/apb2csr.sv" -match "*presetn*"

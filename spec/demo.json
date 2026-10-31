@@ -1,0 +1,77 @@
+{
+  "name": "demo",
+  "description": "Demo peripheral - exercises every supported field access type",
+  "data_width": 32,
+  "addr_width": 8,
+  "error_on_unmapped": true,
+  "reset_type": "async",
+  "registers": [
+    {
+      "name": "CTRL", "offset": "0x00", "description": "Control register",
+      "fields": [
+        { "name": "EN",        "bits": "0",     "access": "RW",  "reset": 0,      "description": "Global enable" },
+        { "name": "MODE",      "bits": "3:1",   "access": "RW",  "reset": "0x2",  "description": "Operating mode" },
+        { "name": "PRESCALER", "bits": "15:8",  "access": "RW",  "reset": "0x10", "description": "Clock prescaler" },
+        { "name": "START",     "bits": "31",    "access": "W1P",                  "description": "Write 1 to start (single-cycle pulse)" }
+      ]
+    },
+    {
+      "name": "STATUS", "offset": "0x04", "description": "Status register",
+      "fields": [
+        { "name": "BUSY",  "bits": "0",   "access": "RO", "description": "Core busy" },
+        { "name": "STATE", "bits": "7:4", "access": "RO", "description": "FSM state" }
+      ]
+    },
+    {
+      "name": "INT_STATUS", "offset": "0x08", "description": "Interrupt status",
+      "fields": [
+        { "name": "DONE", "bits": "0", "access": "W1C", "description": "Operation done" },
+        { "name": "ERR",  "bits": "1", "access": "W1C", "description": "Operation error" }
+      ]
+    },
+    {
+      "name": "INT_EN", "offset": "0x0C", "description": "Interrupt enable",
+      "fields": [
+        { "name": "DONE", "bits": "0", "access": "RW", "description": "Enable DONE interrupt" },
+        { "name": "ERR",  "bits": "1", "access": "RW", "description": "Enable ERR interrupt" }
+      ]
+    },
+    {
+      "name": "CMD", "offset": "0x10", "description": "Command flags (set by SW, cleared by HW)",
+      "fields": [
+        { "name": "FLAGS", "bits": "7:0", "access": "W1S", "description": "Command request flags" }
+      ]
+    },
+    {
+      "name": "EVENT", "offset": "0x14", "description": "Sticky events, cleared on read",
+      "fields": [
+        { "name": "FLAGS", "bits": "3:0", "access": "RC", "description": "Event flags" }
+      ]
+    },
+    {
+      "name": "COUNTER", "offset": "0x18", "description": "Counter, writable by SW and HW",
+      "fields": [
+        { "name": "VALUE", "bits": "31:0", "access": "RW", "hw_write": true, "description": "Counter value" }
+      ]
+    },
+    {
+      "name": "KEY", "offset": "0x1C", "description": "Write-only key",
+      "fields": [
+        { "name": "VALUE", "bits": "31:0", "access": "WO", "description": "Key value" }
+      ]
+    },
+    {
+      "name": "DATA", "offset": "0x20", "description": "Data port (FIFO style, with access strobes)", "strobe": true,
+      "fields": [
+        { "name": "VALUE", "bits": "31:0", "access": "RO", "description": "Read data from hardware" }
+      ]
+    },
+    {
+      "name": "VERSION", "offset": "0xFC", "description": "IP version",
+      "fields": [
+        { "name": "MINOR", "bits": "15:0",  "access": "RO", "const": true, "reset": "0x0003", "description": "Minor version" },
+        { "name": "MAJOR", "bits": "31:16", "access": "RO", "const": true, "reset": "0x0001", "description": "Major version" }
+      ]
+    }
+  ]
+}
