@@ -67,6 +67,14 @@
       ]
     },
     {
+      "name": "ZERO_WR", "offset": "0x24", "description": "Write-0 actions (active-low software events)",
+      "fields": [
+        { "name": "CLR", "bits": "3:0",   "access": "W0C",                "description": "Status bits: write 0 to clear, set by hardware" },
+        { "name": "SET", "bits": "11:8",  "access": "W0S",                "description": "Request bits: write 0 to set, cleared by hardware" },
+        { "name": "TOG", "bits": "19:16", "access": "W0T", "reset": "0x5", "description": "Control bits: write 0 to toggle" }
+      ]
+    },
+    {
       "name": "VERSION", "offset": "0xFC", "description": "IP version",
       "fields": [
         { "name": "MINOR", "bits": "15:0",  "access": "RO", "const": true, "reset": "0x0003", "description": "Minor version" },

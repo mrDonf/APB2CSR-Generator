@@ -1,7 +1,7 @@
 // =============================================================================
 // tb_demo_apb_csr.sv - directed test of the csrgen-generated "demo" APB4 IP
 // -----------------------------------------------------------------------------
-// Exercises every field access type (RW, RO, WO, W1C, W1S, RC, W1P, const,
+// Exercises every field access type (RW, RO, WO, W1C, W1S, W0C, W0S, W0T, RC, W1P, const,
 // hw_write, access strobes), reset values, byte strobes and error responses.
 // Offsets / reset values are taken from the generated demo_csr_pkg.
 // =============================================================================
@@ -32,6 +32,7 @@ module tb_demo_apb_csr;
   logic        counter_we;
   logic [31:0] key_value, data_value;
   logic        data_wr, data_rd;
+  logic [3:0]  zw_clr, zw_clr_set, zw_set, zw_set_clr, zw_tog;
 
   demo_apb_csr dut (
     .pclk                  (pclk),
@@ -68,7 +69,12 @@ module tb_demo_apb_csr;
     .key_value_o           (key_value),
     .data_value_i          (data_value),
     .data_wr_o             (data_wr),
-    .data_rd_o             (data_rd)
+    .data_rd_o             (data_rd),
+    .zero_wr_clr_o         (zw_clr),
+    .zero_wr_clr_set_i     (zw_clr_set),
+    .zero_wr_set_o         (zw_set),
+    .zero_wr_set_clr_i     (zw_set_clr),
+    .zero_wr_tog_o         (zw_tog)
   );
 
   // ---------------------------------------------------------------------------
@@ -119,7 +125,7 @@ module tb_demo_apb_csr;
 
     apb.init();
     {status_busy, status_state, int_done_set, int_err_set, cmd_flags_clr,
-     event_flags_set, counter_we, counter_d, data_value} = '0;
+     event_flags_set, counter_we, counter_d, data_value, zw_clr_set, zw_set_clr} = '0;
     {n_start, n_data_wr, n_data_rd} = '0;
     presetn = 1'b0;
     repeat (4) @(posedge pclk);
@@ -136,6 +142,8 @@ module tb_demo_apb_csr;
     rd_chk(DEMO_EVENT_OFFSET,      DEMO_EVENT_RESET,      "EVENT reset");
     rd_chk(DEMO_COUNTER_OFFSET,    DEMO_COUNTER_RESET,    "COUNTER reset");
     rd_chk(DEMO_KEY_OFFSET,        DEMO_KEY_RESET,        "KEY reset");
+    rd_chk(DEMO_ZERO_WR_OFFSET,    DEMO_ZERO_WR_RESET,    "ZERO_WR reset");
+    check("ZERO_WR reset value", DEMO_ZERO_WR_RESET, 32'h0005_0000);
     rd_chk(DEMO_VERSION_OFFSET,    DEMO_VERSION_RESET,    "VERSION reset");
     check("VERSION value", DEMO_VERSION_RESET, 32'h0001_0003);
     check("ctrl_mode_o reset", 32'(ctrl_mode), 32'h2);
@@ -263,8 +271,48 @@ module tb_demo_apb_csr;
     @(posedge pclk);
     check("DATA wr strobe count", n_data_wr - c0, 1);
 
+    // --- W0C / W0S / W0T   (ZERO_WR: CLR[3:0] W0C, SET[11:8] W0S, TOG[19:16] W0T)
+    $display("T11: W0C / W0S / W0T");
+    wr(DEMO_ZERO_WR_OFFSET, 32'hFFFF_FFFF);                   // all ones: no action
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0005_0000, "ZERO_WR write all-ones");
+    zw_clr_set <= 4'b1011;                                     // hardware sets CLR bits
+    @(posedge pclk);
+    zw_clr_set <= 4'b0000;
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0005_000B, "W0C set by hw");
+    wr(DEMO_ZERO_WR_OFFSET, 32'hFFFF_FFFE);                   // W0C: clear bit 0
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0005_000A, "W0C write 0 clears");
+    check("zero_wr_clr_o", 32'(zw_clr), 32'hA);
+    wr(DEMO_ZERO_WR_OFFSET, 32'h0000_0000, 1'b0, 4'b0000);    // no lanes: no action
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0005_000A, "W0x with PSTRB=0");
+    wr(DEMO_ZERO_WR_OFFSET, 32'h0000_0000, 1'b0, 4'b0100);    // lane 2 only: toggle TOG
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h000A_000A, "W0T toggle, other lanes masked");
+    wr(DEMO_ZERO_WR_OFFSET, 32'hFFFF_F9FF);                   // W0S: set SET bits 2,1
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h000A_060A, "W0S write 0 sets");
+    check("zero_wr_set_o", 32'(zw_set), 32'h6);
+    zw_set_clr <= 4'b0010;                                     // hardware clears SET bit 1
+    @(posedge pclk);
+    zw_set_clr <= 4'b0000;
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h000A_040A, "W0S cleared by hw");
+    // Same-cycle conflicts: the software write happens in the APB SETUP cycle,
+    // so the hardware pulse is applied in exactly that cycle.
+    fork
+      wr(DEMO_ZERO_WR_OFFSET, 32'hFFFF_FFFE);                 // W0C clear bit 0 ...
+      begin zw_clr_set <= 4'b0001; @(posedge pclk); zw_clr_set <= 4'b0000; end  // ... hw sets it
+    join
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h000A_040B, "W0C: hw set beats sw clear");
+    fork
+      wr(DEMO_ZERO_WR_OFFSET, 32'hFFFF_F7FF);                 // W0S set bit 3 ...
+      begin zw_set_clr <= 4'b1000; @(posedge pclk); zw_set_clr <= 4'b0000; end  // ... hw clears it
+    join
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h000A_0C0B, "W0S: sw set beats hw clear");
+    wr(DEMO_ZERO_WR_OFFSET, 32'hFFF0_FFFF);                   // W0T toggle all: A -> 5
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0005_0C0B, "W0T toggle all");
+    wr(DEMO_ZERO_WR_OFFSET, 32'hFFFA_FFFF);                   // W0T toggle bits 0,2: 5 -> 0
+    rd_chk(DEMO_ZERO_WR_OFFSET, 32'h0000_0C0B, "W0T toggle selected bits");
+    check("zero_wr_tog_o", 32'(zw_tog), 32'h0);
+
     // --- Error responses
-    $display("T11: error responses");
+    $display("T12: error responses");
     rd(8'h40, d, 1'b1);
     check("unmapped read data", d, 0);
     wr(8'h40, 32'h1, 1'b1);

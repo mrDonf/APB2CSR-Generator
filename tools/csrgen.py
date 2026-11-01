@@ -20,6 +20,9 @@ Supported field access types:
     WO   write-only (reads return 0)    hw: <reg>_<fld>_o
     W1C  write 1 to clear, hw sets      hw: <reg>_<fld>_o, <reg>_<fld>_set_i
     W1S  write 1 to set, hw clears      hw: <reg>_<fld>_o, <reg>_<fld>_clr_i
+    W0C  write 0 to clear, hw sets      hw: <reg>_<fld>_o, <reg>_<fld>_set_i
+    W0S  write 0 to set, hw clears      hw: <reg>_<fld>_o, <reg>_<fld>_clr_i
+    W0T  write 0 to toggle              hw: <reg>_<fld>_o
     RC   clear on read, hw sets         hw: <reg>_<fld>_o, <reg>_<fld>_set_i
     W1P  write 1 -> 1-cycle pulse       hw: <reg>_<fld>_o  (reads return 0)
 Register option "strobe": true adds <reg>_wr_o / <reg>_rd_o access pulses.
@@ -33,9 +36,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-TOOL_VERSION = "1.0.0"
+TOOL_VERSION = "1.1.0"
 
-ACCESS_TYPES = ("RW", "RO", "WO", "W1C", "W1S", "RC", "W1P")
+ACCESS_TYPES = ("RW", "RO", "WO", "W1C", "W1S", "W0C", "W0S", "W0T", "RC", "W1P")
 
 SV_KEYWORDS = {
     "always", "and", "assign", "begin", "bit", "buf", "byte", "case", "class",
@@ -77,15 +80,15 @@ class Field:
 
     @property
     def has_storage(self) -> bool:
-        return self.access in ("RW", "WO", "W1C", "W1S", "RC", "W1P")
+        return self.access in ("RW", "WO", "W1C", "W1S", "W0C", "W0S", "W0T", "RC", "W1P")
 
     @property
     def sw_readable(self) -> bool:
-        return self.access in ("RW", "RO", "W1C", "W1S", "RC")
+        return self.access in ("RW", "RO", "W1C", "W1S", "W0C", "W0S", "W0T", "RC")
 
     @property
     def sw_writable(self) -> bool:
-        return self.access in ("RW", "WO", "W1C", "W1S", "W1P")
+        return self.access in ("RW", "WO", "W1C", "W1S", "W0C", "W0S", "W0T", "W1P")
 
     @property
     def read_reset(self) -> int:
@@ -360,9 +363,9 @@ def hw_ports(reg: Register):
         if f.access == "RW" and f.hw_write:
             yield ("input", 1, f"{s}_we_i", f"{reg.name}.{f.name} hardware write enable")
             yield ("input", w, f"{s}_d_i", f"{reg.name}.{f.name} hardware write data")
-        elif f.access in ("W1C", "RC"):
+        elif f.access in ("W1C", "W0C", "RC"):
             yield ("input", w, f"{s}_set_i", f"{reg.name}.{f.name} hardware set")
-        elif f.access == "W1S":
+        elif f.access in ("W1S", "W0S"):
             yield ("input", w, f"{s}_clr_i", f"{reg.name}.{f.name} hardware clear")
     if reg.strobe:
         yield ("output", 1, f"{sig(reg)}_wr_o", f"{reg.name} software write pulse")
@@ -527,6 +530,12 @@ def gen_regs(blk: Block) -> str:
                 L.append(f"    else {q} <= ({q} & ~({wd} & {wm} & {rep(wr)})) | {s}_set_i;")
             elif f.access == "W1S":
                 L.append(f"    else {q} <= ({q} & ~{s}_clr_i) | ({wd} & {wm} & {rep(wr)});")
+            elif f.access == "W0C":
+                L.append(f"    else {q} <= ({q} & ~(~{wd} & {wm} & {rep(wr)})) | {s}_set_i;")
+            elif f.access == "W0S":
+                L.append(f"    else {q} <= ({q} & ~{s}_clr_i) | (~{wd} & {wm} & {rep(wr)});")
+            elif f.access == "W0T":
+                L.append(f"    else {q} <= {q} ^ (~{wd} & {wm} & {rep(wr)});")
             elif f.access == "RC":
                 L.append(f"    else {q} <= ({q} & ~{rep(rd)}) | {s}_set_i;")
             elif f.access == "W1P":
@@ -699,6 +708,9 @@ ACCESS_DESC = {
     "WO":  "Write-only, reads return 0",
     "W1C": "Write 1 to clear, set by hardware",
     "W1S": "Write 1 to set, cleared by hardware",
+    "W0C": "Write 0 to clear, set by hardware",
+    "W0S": "Write 0 to set, cleared by hardware",
+    "W0T": "Write 0 to toggle",
     "RC":  "Cleared on read, set by hardware",
     "W1P": "Write 1 generates a single-cycle pulse, reads return 0",
 }
